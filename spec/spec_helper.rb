@@ -1,6 +1,17 @@
 require 'rubygems'
-require 'activesupport'
+require 'active_support'
+require 'active_support/core_ext'
 
-$LOAD_PATH << File.dirname(__FILE__) + "/../lib/"
+require File.dirname(__FILE__) + "/../lib/solon"
 
-ActiveSupport::Dependencies.load_paths = $LOAD_PATH
+
+class Rails
+  def self.logger
+    Logger.new('/tmp/log.txt')
+  end
+end
+
+Solon::Config.vendor = '[add vendorname here for simulator]'
+Solon::Config.gateway_mode = :simulator
+
+

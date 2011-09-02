@@ -2,7 +2,7 @@ require 'cgi'
 module Solon
   class SagepayResponse
     def initialize(response)
-      RAILS_DEFAULT_LOGGER.debug "Sagepay response: #{response}"
+      ::Rails.logger.debug "Sagepay response: #{response}"
       @response = response
       if @response.is_a?(String)
         response.split("\r\n").each do |line|

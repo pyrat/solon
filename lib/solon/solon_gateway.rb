@@ -298,7 +298,7 @@ private
   end
 
   def commit!(action)
-    RAILS_DEFAULT_LOGGER.debug  "Sending Sagepay post to #{url_for(action)}:\n" +
+    ::Rails.logger.debug  "Sending Sagepay post to #{url_for(action)}:\n" +
                                 "Post: #{@post.inspect}\n" +
                                 "Post data: #{@post.to_post_data}"
     response = Solon::Net::HttpsGateway.new(url_for(action), true, debug?).send({}, @post.to_post_data)
@@ -377,7 +377,7 @@ private
   end
   
   def log(method, options)
-    RAILS_DEFAULT_LOGGER.debug "Called #{method} with options #{options.inspect}"
+    ::Rails.logger.debug "Called #{method} with options #{options.inspect}"
   end
 
   def requires!(hash, *params)

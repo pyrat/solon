@@ -2,142 +2,150 @@ h1. Solon - Sagepay VSP Server
 
 h2. Introduction
 
-Solon is a library for accessing the Sagepay VSP Server. Its patterns are loosely modeled on "ActiveMerchant":http://www.activemerchant.org/, for clarity (unfortunately AM doesn't support the VSP Server mode of operation). Solon was built for an application called "Woobius":https://www.woobius.com, but is released free of charge (and free of any warranties) to the community in the hope that it will be useful.
+Solon is another library for interacting with the sagepay VSP server. It is largely the codebase from the seemingly defunct Peeves library with some modifications.
 
-Using the Sagepay VSP Server enables you to not have to host payment pages on your own site. You initiate a transaction, then forward the user to the page returned by Sagepay, and the rest is handled off-site. This has many benefits, in particular not needing to implement credit card validation pages yourself, not needing to handle credit card numbers directly (which means that you're automatically PCI-DSS compliant), and not needing to deal with 3D-secure yourself.
+This library is not the cleanest out there and you may want to look at the other sagepay offerings before using this library.
 
-Sagepay is an UK payment gateway. You can find more information on their VPS Server service "here":http://techsupport.Sagepay.com/vspservercustom.asp.
 
-h2. Licence
+h2. Installation (Rails 3)
 
-The initial version of Solon was written from scratch by Daniel Tenner. It is loosely based on ActiveMerchant's patterns, but all code is original, and is licenced under the "Apache Licence":http://www.oss-watch.ac.uk/resources/apache2.xml.
-
-As a user, this means you can effectively use Solon for whatever you want so long as you agree not to sue people about it.
-
-As a contributor, it means that you licence to Solon any contributions that you make as per the Apache licence.
-
-h2. Kicking the tyres
-
-After setting up your IP address in the VSP Simulator, and obtaining a valid simulator vendor name, temporarily edit <code>simulate.rb</code> with your *vendor name* and run:
+Add the following to your Gemfile
 
 <pre>
-	ruby simulate.rb
+gem 'solon'
 </pre>
 
-Everything should work. If it doesn't work, try asking me (swombat) for help on freenode, channel #flails.
-
-Assuming everything worked fine, revert your change to simulate.rb.
-
-h2. Usage
-
-h3. Configuration
-
-In each environment file, you want to do something like this:
-
 <pre>
-	PEEVES_VENDOR           = "woobius"
-	PEEVES_GATEWAY_MODE     = :simulator
+  bundle
 </pre>
 
-The gateway mode can be set to <code>:simulator</code>, <code>:test</code>, or <code>:live</code>.
+In each of your environments you can define the sagepay mode of operation accordingly.
 
-Then, in environment.rb, do:
+In config/environments/(development|test|production|[staging]).rb
 
 <pre>
-	Solon::Config.vendor 		= PEEVES_VENDOR
-	Solon::Config.gateway_mode = PEEVES_GATEWAY_MODE
+	Solon::Config.vendor 		= [vendor_name]
+	Solon::Config.gateway_mode = :simulator | :test | :live
 </pre>
 
-h3. Making a request
+h2. Integration Guide
 
-As per <code>simulate.rb</code>:
+Best plan is to generate yourself an controller for dealing with the integration.
+
+
+rails g controller sages
+
+in routes.rb
+
+resources :sages
+
+
+Assumes an order has an identifier in order.identifier
 
 <pre>
-	transaction_reference = Solon::UniqueId.generate("TEST")
-	customer_data = Solon::CustomerData.new(:surname => 'blah',
-	                                         :firstnames => 'blah',
-	                                         :address1 => 'blah',
-	                                         :address2 => 'blah',
-	                                         :city => 'blah',
-	                                         :post_code => 'blah',
-	                                         :country => 'gb',
-	                                         :email => 'customer@email.com'
-	                                        )
+require 'digest/sha1'
 
-	# Payment registration
-	payment_response = p.payment(Solon::Money.new(1000, "GBP"),
-	              {
-	                :transaction_reference => transaction_reference,
-	                :description           => "Test Transaction",
-	                :notification_url      => "http://callback.example.com/process_stuff",
-	                :customer_data         => { :billing  => customer_data,
-	                                            :delivery => customer_data,
-	                                            :email    => customer_data.email }
-	              })
+before_create :set_identifier
+
+def set_identifier
+  self.identifier = Digest::SHA1.hexdigest(rand(1000).to_s + Time.now.to_s.split(//).sort_by {rand}.join)
+end
 </pre>
 
-This will register a payment and return a url that you should forward the user to.
+It is a good plan to create an order_transaction model to store order transactions locally for debugging.
 
-Once the user has made the payment on the Sagepay VSP Server pages, you will receive a callback at the URL you defined as <code>:notification_url</code>. You should call something like the following on the parameters that you receive back:
+The first step is registering the payment.
 
 <pre>
-	def record_response_params(params)
-    returning SolonGateway.parse_notification(params) do |response|
-      self.update_attributes(
-        :last_status                          => response.status,
-        :last_status_detail                   => response.last_status_detail,
-        :vps_transaction_id                   => response.vps_transaction_id,
-        :transaction_authorisation_number     => response.transaction_authorisation_number,
-        :status_3d_secure                     => response.status_3d_secure,
-        :code_3d_secure                       => response.code_3d_secure
-      )
-    end    
+def create
+  @order.update_attribute(:transaction_reference, Solon::UniqueId.generate(@order.id.to_s))
+
+  p = SolonGateway.new
+  @response = p.payment Solon::Money.new(@order.amount.to_f, "GBP"),
+  {
+    :transaction_reference => @order.transaction_reference,
+    :description => "Description of payment",
+    :notification_url => callback_sage_url(@order.identifier),
+    :customer_data => @order.sage_customer_data
+  }
+  if @response.next_url
+    @order.transactions.create(:params => @response, :success => true, :message => "Purchase Transaction", 
+    :amount => @order.amount.to_f, :reference => @order.transaction_reference)
+    @order.update_attributes(:security_key => @response.security_key, :user_location => 'away')
+    @order.send_pending_email
+    redirect_to @response.next_url
+  else
+    @order.transactions.create(:params => @response, :success => false, :message => "Purchase Transaction")
+    flash[:warning] = "Unable to make payment, please contact support."
+    redirect_to root_url
   end
+end
 </pre>
 
-In response to this, you must send back a success message or the transaction will eventually be cancelled by Sagepay:
+The next step is handling to callbacks from sage page.
 
 <pre>
-	render :text => SolonGateway.response(SolonGateway::APPROVED, url, "Payment succeeded")
+def callback
+  # Parse the callback
+  callback = SolonGateway.parse_callback(request.raw_post)
+  
+  
+  # Get the order from identifier
+  begin
+    @order = Order.find_by_identifier!(params[:id])
+    @order.sage_callback = callback
+  rescue ActiveRecord::RecordNotFound =>  msg
+    # Error if cannot find.
+    render :text => SolonGateway.response('INVALID', no_order_sage_url, 'Transaction complete'), :layout => false
+    return
+  end
+  
+  
+  # If the order has already been paid, render an OK response.
+  if @order.paid?
+    render_response(@order)
+    return
+  end
+
+  if @order.valid_callback?
+    # all is well
+  else
+    # error
+  end
+
+  render_response(@order)
+end
 </pre>
 
-Sagepay will then forward the user to <code>url</code>, where you can display a happy success page.
-
-h3. Repeat transactions
-
-Sagepay VSP Server wouldn't be worth much without repeat transactions. Here's an example of how to use them (this code sits on an Invoice class in Woobius):
+Various responses tell the app different things about the order and you need to render a response in the right manner.
 
 <pre>
-  def pay_from(previous_invoice)
-    response = SolonGateway.new.repeat(Solon::Money.new(self.currency_amount, self.currency),
-      {
-        :transaction_reference                    => self.reference,
-        :description                              => self.description,
-        :related_transaction_reference            => previous_invoice.reference,
-        :related_vps_transaction_id               => previous_invoice.vps_transaction_id,
-        :related_security_key                     => previous_invoice.security_key,
-        :related_transaction_authorisation_number => previous_invoice.transaction_authorisation_number
-      })
-    self.update_attributes(
-      :last_status              => response.status,
-      :last_status_detail       => response.status_detail,
-      :vps_transaction_id       => response.vps_transaction_id,
-      :security_key             => response.security_key
-    )
-    if response.approved?
-      self.paid!
+  private
+  def render_response(order)
+    if order.valid_callback?
+      render :text => SolonGateway.response('OK', sage_url(order), 'Transaction complete'), :layout => false
+    elsif order.invalid_callback?
+      render :text => SolonGateway.response('INVALID', invalid_order_sage_url(order), 'Transaction complete'), :layout => false
+    elsif order.sage_callback.st(:NOTAUTHED)
+      render :text => SolonGateway.response('OK', notauthed_sage_url(order), 'Transaction complete'), :layout => false
+    elsif order.sage_callback.st(:ABORT)
+      render :text => SolonGateway.response('OK', abort_sage_url(order), 'Transaction complete'), :layout => false
+    elsif order.sage_callback.st(:REJECTED)
+      render :text => SolonGateway.response('OK', rejected_sage_url(order), 'Transaction complete'), :layout => false
+    elsif order.sage_callback.error?
+      render :text => SolonGateway.response('INVALID', invalid_sage_url(order), 'Transaction complete'), :layout => false
+    else
+      render :text => SolonGateway.response('ERROR', error_sage_url(order), 'Transaction complete'), :layout => false
     end
-
-    response
   end
 </pre>
 
-h3. Keeping abreast of changes
 
-Things might change. If you pull the latest version of Solon and something doesn't work, check the changelog: "CHANGES.textile":http://github.com/swombat/peeves/tree/master/CHANGES.textile.
+Valid and invalid callbacks not only check that the callback is approved (callback.approved?) but also check that the value of the order locally has not changed since the transaction began. This is a danger with offsite payment gateways.
 
-h2. Contributing back
+The checking of whether a callback is valid is left to the app developer.
 
-Please use the fork functionality on github to make a fork and then push back your changes to the fork queue. I will probably accept most useful changes, but it might take me a few days before I get around to it!
 
-Thanks!
+
+
+
