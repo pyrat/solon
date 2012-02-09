@@ -1,10 +1,10 @@
-require 'spec/spec_helper'
+require File.dirname(__FILE__) + '/spec_helper'
 
 describe SolonGateway do
 
   before(:each) do
     @p = SolonGateway.new(:simulator)
-    @p.debug = false
+    @p.debug = true
   end
 
   describe "sending a payment request" do
@@ -25,6 +25,7 @@ describe SolonGateway do
         :notification_url      => "http://test.example.com",
         :customer_data         => {:billing => customer_data, :delivery =>customer_data} ,
       })
+      puts @response.inspect
     end
 
     it "should return a SagepayResponse" do

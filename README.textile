@@ -145,6 +145,12 @@ Valid and invalid callbacks not only check that the callback is approved (callba
 
 The checking of whether a callback is valid is left to the app developer.
 
+h2. Testing
+
+1. Set vendor name in spec helper.
+2. run bundle
+3. bundle exec rspec
+
 
 
 

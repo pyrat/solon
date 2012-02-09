@@ -21,16 +21,31 @@ module Solon
     
     def method_missing(id, *args)
       id = id.to_s
-      @values ||= {}
-
-      case id[-1]
-        when 61: # :blah=
-          @values[id[0..-2].to_sym] = args[0]
-        when 63: # :blah?
-          @values.has_key?(id[0..-2].to_sym)
-        else # :blah
-          @values[id.to_sym]
+      @values ||= {}      
+      
+      # This is incompatible with ruby 1.9
+      
+      if RUBY_VERSION =~ /1.9/
+        case id.last
+          when '=' # :blah=
+            @values[id[0..-2].to_sym] = args[0]
+          when '?' # :blah?
+            @values.has_key?(id[0..-2].to_sym)
+          else # :blah
+            @values[id.to_sym]
+        end
+      else
+        case id[-1]
+          when 61 # :blah=
+            @values[id[0..-2].to_sym] = args[0]
+          when 63 # :blah?
+            @values.has_key?(id[0..-2].to_sym)
+          else # :blah
+            @values[id.to_sym]
+        end
       end
+    
+    
     end
     
     def []=(key, value)
