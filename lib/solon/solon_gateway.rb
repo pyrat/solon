@@ -353,6 +353,7 @@ private
       @post["BillingPostCode"]    = options[:billing].post_code
       @post["BillingCountry"]     = options[:billing].country
       @post["BillingPhone"]       = options[:billing].phone
+      @post["BillingState"]       = options[:billing].state if options[:billing].country == 'US'
     end
   end
 
@@ -367,6 +368,7 @@ private
       @post["DeliveryPostCode"]    = options[:delivery].post_code
       @post["DeliveryCountry"]     = options[:delivery].country
       @post["DeliveryPhone"]       = options[:delivery].phone
+      @post["DeliveryState"]       = options[:delivery].state if options[:delivery].country == 'US'
     end
   end
   
