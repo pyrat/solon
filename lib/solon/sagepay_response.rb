@@ -25,16 +25,7 @@ module Solon
       
       # This is incompatible with ruby 1.9
       
-      if RUBY_VERSION =~ /1.9/
-        case id.last
-          when '=' # :blah=
-            @values[id[0..-2].to_sym] = args[0]
-          when '?' # :blah?
-            @values.has_key?(id[0..-2].to_sym)
-          else # :blah
-            @values[id.to_sym]
-        end
-      else
+      if RUBY_VERSION =~ /1.8/
         case id[-1]
           when 61 # :blah=
             @values[id[0..-2].to_sym] = args[0]
@@ -43,8 +34,16 @@ module Solon
           else # :blah
             @values[id.to_sym]
         end
+      else
+        case id.last
+          when '=' # :blah=
+            @values[id[0..-2].to_sym] = args[0]
+          when '?' # :blah?
+            @values.has_key?(id[0..-2].to_sym)
+          else # :blah
+            @values[id.to_sym]
+        end
       end
-    
     
     end
     
